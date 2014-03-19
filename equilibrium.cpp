@@ -73,7 +73,7 @@ static bool g_mouseClickDown = false;    // is the mouse button pressed
 static bool g_mouseLClickButton, g_mouseRClickButton, g_mouseMClickButton;
 static int g_mouseClickX, g_mouseClickY; // coordinates for mouse click event
 static int g_activeShader = 1;
-static int g_objToManip = 0;  // object to manipulate 
+static int g_objToManip = 1;  // object to manipulate 
 
   // Animation globals for time-based animation
 static const float g_animStart = 0.0;
@@ -82,7 +82,7 @@ static float g_animClock = g_animStart; // clock parameter runs from g_animStart
 static float g_animSpeed = 0.5;         // clock units per second
 static int g_elapsedTime = 0;           // keeps track of how long it takes between frames
 static float g_animIncrement = g_animSpeed/60.0; // updated by idle() based on GPU speed
-
+static int viewPoint = -1;
 
 
 struct ShaderState {
@@ -216,7 +216,7 @@ static shared_ptr<Geometry> g_cube, g_sphere_cpoint, g_octa, g_tube, g_sphere_mo
 
 static const Cvec3 g_light1(2.0, 3.0, 14.0), g_light2(-2, -3.0, -5.0);  // define two light positions in world space
 static Matrix4 g_eyeRbt = Matrix4::makeTranslation(Cvec3(0.0, 3.25, 10.0));
-static const int g_numObjects = 5; // 3 slabs of 9 cubes each.
+static const int g_numObjects = 27 + 5; // 3 slabs of 9 cubes each.
 static Matrix4 g_objectRbt[g_numObjects] = {}; // each object gets its own RBT  
 
 static Bezier curve = Bezier(Cvec3(1, 3, 0), Cvec3(2, 2, 2), Cvec3(2, 2, 4), Cvec3(3, 1, 5));
@@ -328,7 +328,7 @@ static Matrix4 makeProjectionMatrix() {
 
 static void drawScene() {
   const Matrix4 projmat = makeProjectionMatrix(); // build projection matrix
-  const Matrix4 invEyeRbt = inv(g_eyeRbt); // store inverse so we don't have to recompute it
+  const Matrix4 invEyeRbt = inv(g_eyeRbt);
   const Cvec3 eyeLight1 = Cvec3(invEyeRbt * Cvec4(g_light1, 1)); // g_light1 position in eye coordinates
   const Cvec3 eyeLight2 = Cvec3(invEyeRbt * Cvec4(g_light2, 1)); // g_light2 position in eye coordinates
 
@@ -352,21 +352,28 @@ static void drawScene() {
     Matrix4 MVM = invEyeRbt * g_objectRbt[i];
     Matrix4 NMVM = normalMatrix(MVM);
     sendModelViewNormalMatrix(curSS, MVM, NMVM);
-    if (i >= 1 && i <= 5) {
+
+    if (g_objToManip == i) {
+      safe_glUniform3f(curSS.h_uColor, 1.0, 0.0, 1.0); // use clock parameter to color object
+    }
+    else if (i >= 1 && i < 5) {
       safe_glUniform3f(curSS.h_uColor, 1.0, 1.0, 0.0); // use clock parameter to color object
     }
-    else {
+    else if (i == 0) {
       safe_glUniform3f(curSS.h_uColor, 1.0-g_animClock, 0.0, g_animClock); // use clock parameter to color object
+    }
+    else {
+      safe_glUniform3f(curSS.h_uColor, (i % 2), (i + 1) % 2, (i + 1) % 3); // use clock parameter to color object
     }
 
     if (i == 0) {
       g_objectRbt[0] = Matrix4::makeTranslation(curve.getPoint(1 - g_animClock));
       g_sphere_moving->draw(curSS);
     }
-    if (i <= 5 && i >= 1) {
+    if (i < 5 && i >= 1) {
       g_sphere_cpoint->draw(curSS);
     }
-    if (i > 5 && i < g_numObjects ) {
+    if (i >= 5 && i < g_numObjects ) {
       g_octa->draw(curSS);
     }
   }
@@ -484,6 +491,7 @@ static void keyboard(const unsigned char key, const int x, const int y) {
     << "s\t\tsave screenshot\n"
     << "o\t\tCycle object to manipulate\n"
     << "f\t\tCycle fragment shader\n"
+    << "f\t\tCycle viewpoint\n"
     << "+\t\tIncrease animation speed\n"
     << "-\t\tDecrease animation speed\n"
     << "drag left mouse to rotate\n" 
@@ -497,7 +505,7 @@ static void keyboard(const unsigned char key, const int x, const int y) {
     cout << "Screenshot written to out.ppm." << endl;
     break;
   case 'o':
-    g_objToManip = (g_objToManip +1) % 5;
+    g_objToManip = (g_objToManip + 1) % 5;
     break;
   case '+':
     g_animSpeed *= 1.05;
@@ -506,6 +514,14 @@ static void keyboard(const unsigned char key, const int x, const int y) {
     g_animSpeed *= 0.95;
     break;
   case 'f':
+    break;
+  case 'v':
+    if (viewPoint == -1) {
+      viewPoint = 0;
+    }
+    else {
+      viewPoint = -1;
+    }
     break;
   }
   glutPostRedisplay();
@@ -570,9 +586,10 @@ int main(int argc, char * argv[]) {
 
     initMovingObject(0);
     initBezierPoints(1);
-    // initTranslations(1, 5);
-    // initTranslations(3, 13);
-    // initTranslations(5, 22);
+    initTranslations(1, 5);
+    initTranslations(3, 14);
+    initTranslations(5, 23);
+
 
     initGLState();
     initShaders();
